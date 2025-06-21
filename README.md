@@ -190,4 +190,10 @@ xcodebuild test -scheme CafeParkingFinderApp -destination 'platform=iOS Simulato
 
 ---
 
-**注意**: このアプリを使用するには、有効なGoogle Places APIキーが必要です。 
+**注意**: このアプリを使用するには、有効なGoogle Places APIキーが必要です。
+
+## 開発状況
+
+🚧 **現在開発中** 🚧
+
+このプロジェクトは現在活発に開発中です。新機能や改善点を随時追加予定です。 
