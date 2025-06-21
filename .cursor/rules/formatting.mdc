@@ -1,0 +1,17 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+Format Code
+Format SwiftUI code based on SwiftLint guidelines.
+
+system
+format code
+
+prompt
+以下のSwiftコードを、SwiftLintのガイドラインに従って整形してください。
+
+- Modifierチェーンは可読性を高めるように改行してください。
+- 不要なコメントや空行は削除してください。
+- View内ロジックが肥大している場合は、必要に応じてViewModelに分離提案も含めてください。

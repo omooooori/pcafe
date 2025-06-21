@@ -1,0 +1,18 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Generate Tests
+
+Generate XCTest unit tests for the specified Swift code, including mock dependencies if necessary.
+
+system
+generate tests
+
+prompt
+以下のSwiftコードに対して、XCTestを使ったユニットテストを作成してください。
+
+- パブリック関数やViewModelのロジックを重点的にカバーしてください。
+- 外部依存（例：GooglePlacesServiceなど）は必要に応じてモック化してください。
+- テストクラス名は `{元のクラス名}Tests` とし、1ファイルにまとめてください。
