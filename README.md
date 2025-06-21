@@ -51,12 +51,42 @@ cd pcafe
 3. APIキーを生成
 4. `Utils/Constants.swift`または環境変数でAPIキーを設定
 
-### 3. 依存関係のインストール
+### 3. Google Maps APIキーの取得
+
+1. [Google Cloud Console](https://console.cloud.google.com/)にアクセス
+2. 新しいプロジェクトを作成または既存のプロジェクトを選択
+3. 以下のAPIを有効化：
+   - Places API
+   - Maps SDK for iOS
+   - Geocoding API
+4. 認証情報 → APIキーを作成
+5. 作成したAPIキーに適切な制限を設定：
+   - iOSアプリの制限
+   - 特定のAPIの制限
+
+### 4. APIキーの設定
+
+1. `Utils/APIConfig.swift`ファイルを開く
+2. `googleMapsAPIKey`の値を実際のAPIキーに置き換える：
+
+```swift
+static let googleMapsAPIKey = "YOUR_ACTUAL_API_KEY_HERE"
+```
+
+### 5. Info.plistの設定
+
+`Info.plist`ファイルに以下の設定が含まれていることを確認：
+
+- 位置情報の使用許可設定
+- Google Maps APIキーの設定
+- ネットワークセキュリティ設定
+
+### 6. 依存関係のインストール
 ```bash
 # このプロジェクトは外部依存関係なし（標準ライブラリのみ使用）
 ```
 
-### 4. ビルド・実行
+### 7. ビルド・実行
 ```bash
 # Xcodeでプロジェクトを開く
 open CafeParkingFinderApp.xcodeproj
@@ -87,6 +117,7 @@ CafeParkingFinderApp/
 │   └── LocationService.swift        # 位置情報サービス
 ├── Utils/                           # ユーティリティ
 │   ├── Constants.swift              # 定数定義
+│   ├── APIConfig.swift              # Google Maps APIキー設定
 │   └── Utilities.swift              # 汎用ユーティリティ
 ├── Extensions/                      # Swift拡張
 ├── Mock/                            # モックデータ

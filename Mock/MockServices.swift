@@ -4,9 +4,10 @@ import Combine
 
 // MARK: - Mock Location Service
 class MockLocationService: ObservableObject {
-    @Published var currentLocation: CLLocation?
+    @Published var currentLocation: CLLocation? = CLLocation(latitude: 35.6580, longitude: 139.7016)
     @Published var authorizationStatus: CLAuthorizationStatus = .authorizedWhenInUse
-    @Published var locationError: LocationService.LocationError?
+    @Published var errorMessage: String?
+    @Published var locationError: MockLocationError?
     
     init() {
         // デフォルトで東京の位置を設定
@@ -27,14 +28,15 @@ class MockLocationService: ObservableObject {
         // モックでは何もしない
     }
     
-    func getCurrentLocation() -> AnyPublisher<CLLocation, LocationService.LocationError> {
-        guard let location = currentLocation else {
-            return Fail(error: LocationService.LocationError.unavailable)
+    func getCurrentLocation() -> AnyPublisher<CLLocation, MockLocationError> {
+        if let location = currentLocation {
+            return Just(location)
+                .setFailureType(to: MockLocationError.self)
+                .eraseToAnyPublisher()
+        } else {
+            return Fail(error: MockLocationError.unavailable)
                 .eraseToAnyPublisher()
         }
-        return Just(location)
-            .setFailureType(to: LocationService.LocationError.self)
-            .eraseToAnyPublisher()
     }
     
     // テスト用の位置変更メソッド
@@ -46,7 +48,7 @@ class MockLocationService: ObservableObject {
 // MARK: - Mock Google Places Service
 class MockGooglePlacesService: ObservableObject {
     @Published var isLoading = false
-    @Published var error: GooglePlacesService.PlacesError?
+    @Published var error: PlacesError?
     
     private var delay: TimeInterval = 1.0 // モック用の遅延時間
     
@@ -58,7 +60,7 @@ class MockGooglePlacesService: ObservableObject {
         near location: CLLocation,
         radius: Double = 1000,
         filter: SearchFilter
-    ) -> AnyPublisher<[Cafe], GooglePlacesService.PlacesError> {
+    ) -> AnyPublisher<[Cafe], PlacesError> {
         isLoading = true
         error = nil
         
@@ -70,34 +72,27 @@ class MockGooglePlacesService: ObservableObject {
                 var filteredCafes = MockData.sampleCafes
                 
                 // 評価フィルター
-                if filter.minRating > 0 {
+                if let minRating = filter.minRating, minRating > 0 {
                     filteredCafes = filteredCafes.filter { cafe in
                         guard let rating = cafe.rating else { return false }
-                        return rating >= filter.minRating
+                        return rating >= minRating
                     }
                 }
                 
-                // 価格フィルター
-                filteredCafes = filteredCafes.filter { cafe in
-                    guard let priceLevel = cafe.priceLevel else { return true }
-                    return priceLevel <= filter.maxPriceLevel
-                }
-                
-                // 営業中フィルター
-                if filter.openNow {
+                // 価格レベルフィルター
+                if let maxPriceLevel = filter.maxPriceLevel {
                     filteredCafes = filteredCafes.filter { cafe in
-                        return cafe.openingHours?.openNow == true
+                        if let priceLevel = cafe.priceLevel {
+                            return priceLevel <= maxPriceLevel
+                        }
+                        return false
                     }
                 }
                 
                 // 距離に基づいてソート（実際の距離計算は簡略化）
-                filteredCafes.sort { cafe1, cafe2 in
-                    let distance1 = abs(cafe1.location.latitude - location.coordinate.latitude) +
-                                   abs(cafe1.location.longitude - location.coordinate.longitude)
-                    let distance2 = abs(cafe2.location.latitude - location.coordinate.latitude) +
-                                   abs(cafe2.location.longitude - location.coordinate.longitude)
-                    return distance1 < distance2
-                }
+                filteredCafes.sort(by: { cafe1, cafe2 in
+                    (cafe1.rating ?? 0) > (cafe2.rating ?? 0)
+                })
                 
                 promise(.success(filteredCafes))
             }
@@ -105,13 +100,13 @@ class MockGooglePlacesService: ObservableObject {
         .eraseToAnyPublisher()
     }
     
-    func getPlaceDetails(placeId: String) -> AnyPublisher<Cafe, GooglePlacesService.PlacesError> {
+    func getPlaceDetails(placeId: String) -> AnyPublisher<Cafe, PlacesError> {
         return Future { [weak self] promise in
             DispatchQueue.main.asyncAfter(deadline: .now() + (self?.delay ?? 0.5)) {
-                if let cafe = MockData.sampleCafes.first(where: { $0.placeId == placeId }) {
+                if let cafe = MockData.sampleCafes.first(where: { $0.id == placeId }) {
                     promise(.success(cafe))
                 } else {
-                    promise(.failure(.invalidResponse))
+                    promise(.failure(.apiError(status: "Not Found")))
                 }
             }
         }
@@ -119,13 +114,21 @@ class MockGooglePlacesService: ObservableObject {
     }
     
     // エラーをシミュレートするメソッド
-    func simulateError(_ error: GooglePlacesService.PlacesError) {
+    func simulateError(_ error: PlacesError) {
         self.error = error
     }
     
     // 遅延時間を設定するメソッド
     func setDelay(_ delay: TimeInterval) {
         self.delay = delay
+    }
+    
+    func sortCafesByDistance(from location: CLLocation, cafes: [Cafe]) -> [Cafe] {
+        return cafes.sorted {
+            let distance1 = location.distance(from: CLLocation(latitude: $0.geometry.location.lat, longitude: $0.geometry.location.lng))
+            let distance2 = location.distance(from: CLLocation(latitude: $1.geometry.location.lat, longitude: $1.geometry.location.lng))
+            return distance1 < distance2
+        }
     }
 }
 
@@ -171,7 +174,7 @@ class MockCafeSearchViewModel: ObservableObject {
     
     func searchCafes() {
         guard let location = currentLocation else {
-            error = LocationService.LocationError.unavailable
+            error = MockLocationError.unavailable
             return
         }
         
@@ -180,7 +183,7 @@ class MockCafeSearchViewModel: ObservableObject {
         
         mockPlacesService.searchCafesWithParking(
             near: location,
-            radius: searchFilter.radius,
+            radius: Double(searchFilter.radius),
             filter: searchFilter
         )
         .receive(on: DispatchQueue.main)
@@ -227,7 +230,7 @@ class MockCafeSearchViewModel: ObservableObject {
     func getDistance(to cafe: Cafe) -> String {
         guard let location = currentLocation else { return "距離不明" }
         
-        let distance = location.distance(from: CLLocation(latitude: cafe.location.latitude, longitude: cafe.location.longitude))
+        let distance = location.distance(from: CLLocation(latitude: cafe.geometry.location.lat, longitude: cafe.geometry.location.lng))
         
         if distance < 1000 {
             return "\(Int(distance))m"
@@ -244,4 +247,9 @@ class MockCafeSearchViewModel: ObservableObject {
     func simulateError(_ error: Error) {
         self.error = error
     }
+}
+
+// 独自エラー型を定義（必要に応じて拡張）
+enum MockLocationError: Error {
+    case unavailable
 } 
