@@ -1,48 +1,26 @@
 import SwiftUI
 
 struct MainTabView: View {
-    @StateObject private var locationService = LocationService()
-    @StateObject private var placesService = GooglePlacesService(apiKey: "YOUR_API_KEY")
-    @StateObject private var viewModel: CafeSearchViewModel
-    
-    init() {
-        let locationService = LocationService()
-        let placesService = GooglePlacesService(apiKey: "YOUR_API_KEY")
-        self._viewModel = StateObject(wrappedValue: CafeSearchViewModel(
-            locationService: locationService,
-            placesService: placesService
-        ))
-    }
+    @StateObject private var searchViewModel = CafeSearchViewModel()
     
     var body: some View {
         TabView {
-            MapView(viewModel: viewModel)
+            CafeListView()
+                .environmentObject(searchViewModel)
                 .tabItem {
-                    Image(systemName: "map")
-                    Text("マップ")
+                    Image(systemName: "cup.and.saucer.fill")
+                    Text("カフェ検索")
                 }
             
-            CafeListView(viewModel: viewModel)
+            FilterView()
+                .environmentObject(searchViewModel)
                 .tabItem {
-                    Image(systemName: "list.bullet")
-                    Text("リスト")
-                }
-            
-            FavoritesView()
-                .tabItem {
-                    Image(systemName: "heart")
-                    Text("お気に入り")
-                }
-            
-            SettingsView()
-                .tabItem {
-                    Image(systemName: "gear")
-                    Text("設定")
+                    Image(systemName: "slider.horizontal.3")
+                    Text("フィルター")
                 }
         }
-        .accentColor(.brown)
         .onAppear {
-            viewModel.requestLocationPermission()
+            searchViewModel.requestLocationPermission()
         }
     }
 }

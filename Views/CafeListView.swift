@@ -1,83 +1,51 @@
 import SwiftUI
 
 struct CafeListView: View {
-    @ObservedObject var viewModel: CafeSearchViewModel
-    @State private var showingFilter = false
-    @State private var searchText = ""
-    
-    var filteredCafes: [Cafe] {
-        if searchText.isEmpty {
-            return viewModel.cafes
-        } else {
-            return viewModel.cafes.filter { cafe in
-                cafe.name.localizedCaseInsensitiveContains(searchText) ||
-                cafe.address.localizedCaseInsensitiveContains(searchText)
-            }
-        }
-    }
+    @EnvironmentObject var searchViewModel: CafeSearchViewModel
     
     var body: some View {
         NavigationView {
-            VStack {
-                if viewModel.cafes.isEmpty && !viewModel.isLoading {
-                    EmptyStateView {
-                        viewModel.searchCafes()
+            Group {
+                if searchViewModel.isLoading {
+                    ProgressView("カフェを検索中...")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let errorMessage = searchViewModel.errorMessage {
+                    VStack {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.largeTitle)
+                            .foregroundColor(.orange)
+                        Text(errorMessage)
+                            .multilineTextAlignment(.center)
+                            .padding()
+                        Button("再試行") {
+                            searchViewModel.refreshSearch()
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if searchViewModel.cafes.isEmpty {
+                    VStack {
+                        Image(systemName: "cup.and.saucer")
+                            .font(.largeTitle)
+                            .foregroundColor(.gray)
+                        Text("カフェが見つかりませんでした")
+                            .foregroundColor(.gray)
+                        Text("フィルター設定を変更してみてください")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    List(filteredCafes) { cafe in
-                        CafeRowView(cafe: cafe, viewModel: viewModel)
-                            .onTapGesture {
-                                viewModel.selectCafe(cafe)
-                            }
-                    }
-                    .refreshable {
-                        viewModel.searchCafes()
+                    List(searchViewModel.cafes) { cafe in
+                        NavigationLink(destination: CafeDetailView(cafe: cafe)) {
+                            CafeRowView(cafe: cafe)
+                        }
                     }
                 }
             }
-            .searchable(text: $searchText, prompt: "カフェ名や住所で検索")
-            .navigationTitle("カフェ一覧")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        showingFilter = true
-                    }) {
-                        Image(systemName: "slider.horizontal.3")
-                    }
-                }
-                
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: {
-                        viewModel.searchCafes()
-                    }) {
-                        Image(systemName: "magnifyingglass")
-                    }
-                }
-            }
-            .sheet(isPresented: $showingFilter) {
-                FilterView(filter: $viewModel.searchFilter) { filter in
-                    viewModel.updateFilter(filter)
-                }
-            }
-            .sheet(item: $viewModel.selectedCafe) { cafe in
-                CafeDetailView(cafe: cafe, viewModel: viewModel)
-            }
-            .overlay(
-                Group {
-                    if viewModel.isLoading {
-                        LoadingView()
-                    }
-                }
-            )
-            .alert("エラー", isPresented: .constant(viewModel.error != nil)) {
-                Button("OK") {
-                    viewModel.error = nil
-                }
-            } message: {
-                if let error = viewModel.error {
-                    Text(error.localizedDescription)
-                }
+            .navigationTitle("カフェ検索")
+            .refreshable {
+                searchViewModel.refreshSearch()
             }
         }
     }
@@ -85,60 +53,43 @@ struct CafeListView: View {
 
 struct CafeRowView: View {
     let cafe: Cafe
-    @ObservedObject var viewModel: CafeSearchViewModel
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(cafe.name)
-                        .font(.headline)
-                        .foregroundColor(.primary)
-                    
-                    Text(cafe.address)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-                
+                Text(cafe.name)
+                    .font(.headline)
                 Spacer()
-                
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text(viewModel.getDistance(to: cafe))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    if let rating = cafe.rating {
-                        HStack(spacing: 2) {
-                            Image(systemName: "star.fill")
-                                .font(.caption)
-                                .foregroundColor(.yellow)
-                            Text(String(format: "%.1f", rating))
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
+                if let rating = cafe.rating {
+                    HStack(spacing: 4) {
+                        Image(systemName: "star.fill")
+                            .foregroundColor(.yellow)
+                        Text(String(format: "%.1f", rating))
+                            .font(.caption)
                     }
                 }
             }
             
+            Text(cafe.address)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            
             HStack {
                 if let priceLevel = cafe.priceLevel {
-                    HStack(spacing: 2) {
-                        ForEach(0..<priceLevel, id: \.self) { _ in
-                            Image(systemName: "yensign.circle.fill")
-                                .font(.caption)
-                                .foregroundColor(.green)
-                        }
-                    }
+                    Text(String(repeating: "¥", count: priceLevel))
+                        .font(.caption)
+                        .foregroundColor(.green)
                 }
                 
                 Spacer()
                 
-                Button(action: {
-                    viewModel.toggleFavorite(for: cafe)
-                }) {
-                    Image(systemName: cafe.isFavorite ? "heart.fill" : "heart")
-                        .foregroundColor(cafe.isFavorite ? .red : .gray)
+                if cafe.hasParking {
+                    HStack(spacing: 4) {
+                        Image(systemName: "car.fill")
+                            .foregroundColor(.blue)
+                        Text("駐車場あり")
+                            .font(.caption)
+                    }
                 }
             }
         }
@@ -146,44 +97,7 @@ struct CafeRowView: View {
     }
 }
 
-struct EmptyStateView: View {
-    let onSearch: () -> Void
-    
-    var body: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "cup.and.saucer")
-                .font(.system(size: 60))
-                .foregroundColor(.gray)
-            
-            VStack(spacing: 8) {
-                Text("カフェが見つかりません")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.primary)
-                
-                Text("現在地周辺のカフェを検索してみましょう")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-            
-            Button(action: onSearch) {
-                Text("検索する")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 30)
-                    .padding(.vertical, 12)
-                    .background(Color.brown)
-                    .cornerRadius(25)
-            }
-        }
-        .padding()
-    }
-}
-
 #Preview {
-    CafeListView(viewModel: CafeSearchViewModel(
-        locationService: LocationService(),
-        placesService: GooglePlacesService(apiKey: "test")
-    ))
+    CafeListView()
+        .environmentObject(CafeSearchViewModel())
 } 
